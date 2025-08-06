@@ -5,8 +5,6 @@ import logging
 from typing import Dict, Any
 
 DEFAULT_HEIGHT = 0.25
-MIN_HEIGHT = 0.09
-MAX_HEIGHT = 0.35
 SPEED_RANGE = (-0.4, 0.4)
 UDP_PORT = 12346
 
@@ -23,8 +21,6 @@ class DogController:
         self.udp_transport = None
         self._params_lock = asyncio.Lock()
         self.last_position = None  # 添加位置跟踪
-        self.current_height = DEFAULT_HEIGHT  # 跟踪当前高度
-        self.HEIGHT_SCALE = 0.5  # 高度调整的缩放因子
 
     async def init_udp(self):
         class UDPProtocol(asyncio.DatagramProtocol):
@@ -73,28 +69,9 @@ class DogController:
         params = {
             'vx': 0.0,
             'wz': 0.0,
-            'body_height': self.current_height
+            'body_height': DEFAULT_HEIGHT
         }
-        # 计算高度调整
-        if buttons and buttons[0] and 'z' in position:
-            current_position = [
-                position.get('x', 0),
-                position.get('y', 0),
-                position.get('z', 0)
-            ]
-
-            if self.last_position is not None:
-                # 计算z轴移动增量
-                delta_z = (
-                    current_position[1] - self.last_position[1]) * self.HEIGHT_SCALE
-                # 更新高度
-                self.current_height = max(MIN_HEIGHT, min(
-                    MAX_HEIGHT, self.current_height + delta_z))
-                params['body_height'] = self.current_height
-
-            self.last_position = current_position
-        else:
-            self.last_position = None  # 重置位置跟踪
+        # 摇杆控制
         if buttons:
             # 安全地访问axes数组，避免索引越界
             vx_axis = axes[3] if len(axes) > 3 else 0
@@ -103,7 +80,7 @@ class DogController:
             params['vx'] = -vx_axis * SPEED_RANGE[1]
             params['wz'] = -wz_axis * SPEED_RANGE[1]
             logger.info(
-                f"移动: {params['vx']:.2f}m/s, 转向: {params['wz']:.2f}rad/s, 高度: {params['body_height']:.2f}m")
+                f"移动: {params['vx']:.2f}m/s, 转向: {params['wz']:.2f}rad/s")
 
         await self._set_parameters_safe(params)
 

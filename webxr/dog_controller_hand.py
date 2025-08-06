@@ -5,8 +5,6 @@ import logging
 from typing import Dict, Any
 
 DEFAULT_HEIGHT = 0.25
-MIN_HEIGHT = 0.09
-MAX_HEIGHT = 0.28
 SPEED_RANGE = (-0.4, 0.4)
 UDP_PORT = 12346
 
@@ -23,8 +21,6 @@ class DogController:
         self.udp_transport = None
         self._params_lock = asyncio.Lock()
         self.last_position = None  # 添加位置跟踪
-        self.current_height = DEFAULT_HEIGHT  # 跟踪当前高度
-        self.HEIGHT_SCALE = 0.2  # 高度调整的缩放因子
         self.movement_position = None  # 添加运动控制位置追踪
         self.MOVEMENT_SCALE = 5.0  # 位置变化到速度的映射系数
 
@@ -74,7 +70,7 @@ class DogController:
         params = {
             'vx': 0.0,
             'wz': 0.0,
-            'body_height': self.current_height
+            'body_height': DEFAULT_HEIGHT
         }
         current_position = [
             position.get('x', 0),
@@ -88,22 +84,16 @@ class DogController:
                 # 计算位置变化
                 delta_x = current_position[0] - self.movement_position[0]
                 delta_z = current_position[2] - self.movement_position[2]
-                delta_y = current_position[1] - self.movement_position[1]
                 # 映射到速度命令
                 params['vx'] = -delta_z * self.MOVEMENT_SCALE  # 前后移动（z轴变化）
                 params['wz'] = -delta_x * self.MOVEMENT_SCALE  # 转向（x轴变化）
-                # 更新高度
-                self.current_height = max(MIN_HEIGHT,
-                                          min(MAX_HEIGHT,
-                                              self.current_height + delta_y * self.HEIGHT_SCALE))
-                params['body_height'] = self.current_height
                 # 限制速度范围
                 params['vx'] = max(SPEED_RANGE[0], min(
                     SPEED_RANGE[1], params['vx']))
                 params['wz'] = max(SPEED_RANGE[0], min(
                     SPEED_RANGE[1], params['wz']))
                 logger.info(
-                    f"移动: {params['vx']:.2f}m/s, 转向: {params['wz']:.2f}rad/s, 高度: {params['body_height']:.2f}m")
+                    f"移动: {params['vx']:.2f}m/s, 转向: {params['wz']:.2f}rad/s")
             self.movement_position = current_position
         else:
             self.movement_position = None  # 重置位置追踪
