@@ -6,12 +6,15 @@ import socket
 import logging
 import ssl
 # $ pip install pyopenssl
+
 # 机器狗高度控制
 # web 摄像头esp32
+
 
 # 常量配置
 ARM_ADDRESS = ('127.0.0.1', 12345)  # 机械臂地址
 DOG_ADDRESS = ('127.0.0.1', 12346)  # 机器狗地址
+
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,7 +37,7 @@ def handle_controller_data(controller_id: str, data: Dict[str, Any]):
         'controller_id': controller_id,
         'data': data
     }
-
+    
     # 右手控制器(controller2)控制机械臂，左手控制器(controller1)控制机器狗
     if controller_id == 'controller2':
         arm_socket.sendto(json.dumps(message).encode(), ARM_ADDRESS)

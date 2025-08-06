@@ -1,5 +1,5 @@
 {
-       "homing_offset": [
+    "homing_offset": [
         -2087,
         2972,
         -952,
@@ -30,8 +30,6 @@
         2988,
         -2123,
         2916
- 
-
     ],
     "calib_mode": [
         "DEGREE",
