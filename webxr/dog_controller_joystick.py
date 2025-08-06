@@ -96,8 +96,12 @@ class DogController:
         else:
             self.last_position = None  # 重置位置跟踪
         if buttons:
-            params['vx'] = -axes[3] * SPEED_RANGE[1]
-            params['wz'] = -axes[2] * SPEED_RANGE[1]
+            # 安全地访问axes数组，避免索引越界
+            vx_axis = axes[3] if len(axes) > 3 else 0
+            wz_axis = axes[2] if len(axes) > 2 else 0
+            
+            params['vx'] = -vx_axis * SPEED_RANGE[1]
+            params['wz'] = -wz_axis * SPEED_RANGE[1]
             logger.info(
                 f"移动: {params['vx']:.2f}m/s, 转向: {params['wz']:.2f}rad/s, 高度: {params['body_height']:.2f}m")
 
