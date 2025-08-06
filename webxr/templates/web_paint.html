@@ -6,13 +6,22 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <link type="text/css" rel="stylesheet" href="/static/css/main.css">
+    <script src="/static/streamedian.min.js"></script>
 </head>
 
 <body>
     <div id="info">
         <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> xr - AR Controller
     </div>
-    <video id="webcam" autoplay playsinline style="display: none;"></video>
+    <video id="rtsp-video" autoplay playsinline style="display: none;"></video>
+    
+    <!-- RTSP控制面板 -->
+    <div id="rtsp-controls" style="position: fixed; top: 10px; right: 10px; z-index: 1000; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; color: white;">
+        <input type="text" id="rtsp-url" placeholder="RTSP地址" value="rtsp://192.168.234.1:8554/test" style="width: 200px; margin-bottom: 5px;">
+        <br>
+        <button id="connect-rtsp" style="margin-right: 5px;">连接RTSP</button>
+        <button id="toggle-video" style="background: #28a745;">显示视频</button>
+    </div>
     <script type="importmap">
 			{
 				"imports": {
@@ -31,26 +40,92 @@
         const socket = new WebSocket('wss://' + window.location.host + '/ws');
         let xrCamera = null;
         let controls;
-        async function initWebcam() {
+        let player = null;
+        let videoVisible = false;
+        
+        async function initRTSP() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                const video = document.getElementById('webcam');
-                video.srcObject = stream;
-
+                const video = document.getElementById('rtsp-video');
+                
                 videoTexture = new THREE.VideoTexture(video);
                 videoTexture.minFilter = THREE.LinearFilter;
                 videoTexture.magFilter = THREE.LinearFilter;
                 videoMaterial = new THREE.MeshBasicMaterial({
                     map: videoTexture,
-                    side: THREE.DoubleSide
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.8
                 });
                 const planeGeometry = new THREE.PlaneGeometry(1.6, 0.9);
                 videoPlane = new THREE.Mesh(planeGeometry, videoMaterial);
                 videoPlane.position.set(0, 0, -1);
+                videoPlane.visible = false; // 初始隐藏
                 scene.add(videoPlane);
+                
+                console.log('RTSP视频平面已创建');
             } catch (error) {
-                console.error('无法访问摄像头:', error);
+                console.error('初始化RTSP失败:', error);
             }
+        }
+        
+        function connectRTSP() {
+            const url = document.getElementById('rtsp-url').value.trim();
+            const video = document.getElementById('rtsp-video');
+            
+            if (!url) {
+                alert('请输入RTSP地址');
+                return;
+            }
+            
+            // 停止之前的播放
+            if (player) {
+                try {
+                    player.destroy();
+                } catch (e) {
+                    console.warn('销毁播放器失败:', e);
+                }
+                player = null;
+            }
+            
+            try {
+                // 设置视频源
+                video.src = url;
+                
+                // 如果有Streamedian库，使用它
+                if (window.Streamedian) {
+                    player = Streamedian.player('rtsp-video', {
+                        socket: "ws://localhost:8088/ws/",
+                        bufferDuration: 20,
+                        errorHandler: function (error) {
+                            console.error('RTSP播放错误:', error);
+                        }
+                    });
+                }
+                
+                console.log('RTSP连接成功:', url);
+            } catch (error) {
+                console.error('RTSP连接失败:', error);
+                alert('RTSP连接失败: ' + error.message);
+            }
+        }
+        
+        function toggleVideoVisibility() {
+            videoVisible = !videoVisible;
+            const button = document.getElementById('toggle-video');
+            
+            if (videoPlane) {
+                videoPlane.visible = videoVisible;
+            }
+            
+            if (videoVisible) {
+                button.textContent = '隐藏视频';
+                button.style.background = '#dc3545';
+            } else {
+                button.textContent = '显示视频';
+                button.style.background = '#28a745';
+            }
+            
+            console.log('视频显示状态:', videoVisible);
         }
         init();
         function init() {
@@ -136,7 +211,12 @@
                 socket.send(JSON.stringify(controllersData));
             }, 100);
             window.addEventListener('resize', onWindowResize);
-            initWebcam();
+            
+            // 添加事件监听器
+            document.getElementById('connect-rtsp').addEventListener('click', connectRTSP);
+            document.getElementById('toggle-video').addEventListener('click', toggleVideoVisibility);
+            
+            initRTSP();
         }
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;

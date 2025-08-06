@@ -14,20 +14,20 @@ print("Initialization completed")
 def main():
     app.standUp()
     time.sleep(4)
-    app.lieDown()
-    time.sleep(4)
-    app.standUp()
-    time.sleep(4)
-    app.jump()
-    time.sleep(4)
-    app.frontJump()
-    time.sleep(4)
-    app.backflip()
-    time.sleep(4)
-    app.attitudeControl(0.1,0.1,0.1,0.1)
-    time.sleep(4)
-    app.standUp()
-    time.sleep(4)
+    app.move(0.0, 0.0, 0.0) # 停止移动
+    time.sleep(2)
+    app.move(0.0, 0.0, 0.5) # 向右旋转
+    time.sleep(2)
+    app.move(0.0, 0.0, -0.5)# 向左旋转
+    time.sleep(2)
+    app.move(0.0, 0.5, 0.0) # 向左移动
+    time.sleep(2)
+    app.move(0.0, -0.5, 0.0) # 向右移动
+    time.sleep(2)
+    app.move(0.5, 0.0, 0.0) # 向前移动 
+    time.sleep(2)   
+    app.move(-0.5, 0.0, 0.0)  # 向后移动
+    time.sleep(2)
     app.passive()
 
 if __name__ == "__main__":

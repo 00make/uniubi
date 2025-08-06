@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # 初始化Flask应用
 app = Flask(__name__,
-            static_url_path='',
+            static_url_path='/static',
             static_folder='static',
             template_folder='templates')
 sock = Sock(app)
@@ -52,11 +52,6 @@ def handle_controller_data(controller_id: str, data: Dict[str, Any]):
 @app.route('/')
 def index():
     return render_template('web_paint.html')
-
-
-@app.route('/static/<path:folder>/<path:path>')
-def send_static(folder, path):
-    return send_from_directory(f'static/{folder}', path)
 
 
 @sock.route('/ws')
