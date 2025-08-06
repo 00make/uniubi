@@ -1,0 +1,6 @@
+build
+_skbuild
+.vscode
+.idea
+cmake-build-debug
+demo/cpp/build
