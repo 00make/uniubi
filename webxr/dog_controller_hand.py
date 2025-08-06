@@ -6,7 +6,7 @@ from typing import Dict, Any
 
 DEFAULT_HEIGHT = 0.25
 MIN_HEIGHT = 0.09
-MAX_HEIGHT = 0.30
+MAX_HEIGHT = 0.28
 SPEED_RANGE = (-0.4, 0.4)
 UDP_PORT = 12346
 
@@ -130,7 +130,7 @@ class DogController:
 
 if __name__ == '__main__':
     # 替换为您的机器狗IP地址
-    host = '192.168.139.67'  # 默认值，根据实际情况修改
+    host = '10.10.10.10'  # 默认值，根据实际情况修改
     
     controller = DogController(host=host)
     try:

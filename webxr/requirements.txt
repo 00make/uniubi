@@ -1,15 +1,26 @@
 # Web 服务相关
-flask
-flask-sock
-simple-websocket
+flask==2.0.1
+flask-sock==0.5.2
+simple-websocket==0.5.1
 pyOpenSSL
+
+
 # 机器人控制相关
-robodog
-numpy
-werkzeug
+robodog==0.1.2.5
+numpy==1.23.5
+werkzeug==2.0.3
+
 # 日志和异步支持
-asyncio
+asyncio==3.4.3
+
 # WebSocket和网络相关
-websockets
+websockets==10.1
+
 # JSON处理
-simplejson
+simplejson==3.17.6
+
+
+
+
+
+

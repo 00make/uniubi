@@ -43,8 +43,8 @@ target_gpos_last = init_gpos.copy()
 target_qpos_last = init_qpos.copy()
 base_rotation = init_qpos[0]
 # Connect to robotic arm
-follower_arm = feetech_arm(driver_port="/dev/tty.usbmodem5A460846011",
-                           calibration_file="webxr/so100/main_follower.json")
+follower_arm = feetech_arm(driver_port="/dev/ttyACM0",
+                           calibration_file="so100/main_follower.json")
 # 修改 UDP 数据处理部分
 try:
     start = time.time()
