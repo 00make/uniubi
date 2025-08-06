@@ -1,0 +1,15 @@
+# Web 服务相关
+flask
+flask-sock
+simple-websocket
+pyOpenSSL
+# 机器人控制相关
+robodog
+numpy
+werkzeug
+# 日志和异步支持
+asyncio
+# WebSocket和网络相关
+websockets
+# JSON处理
+simplejson
