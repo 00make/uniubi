@@ -1,145 +1,148 @@
 # code by LinCC111 Boxjod 2025.1.13 Box2AI-Robotics copyright 盒桥智能 版权所有
 # Modified for Piper SDK control
-import os
-import numpy as np
 import time
 from piper_sdk import C_PiperInterface_V2
 import socket
 import json
-import threading
-np.set_printoptions(linewidth=200)
 
-# Initialize Piper robot
-print("正在连接Piper机械臂...")
-piper = C_PiperInterface_V2("can0")
-piper.ConnectPort()
-while not piper.EnablePiper():
-    print("等待机械臂使能...")
-    time.sleep(0.01)
-print("Piper机械臂连接成功！")
+# Constants
+MOVEMENT_SCALE = 1.0
+ROTATION_SCALE = 1.0
+AXIS_MAPPING = {'X': -1, 'Y': -1, 'Z': 1}
+UDP_PORT = 12345
+FACTOR = 1000
 
-# Initialize target position [X, Y, Z, RX, RY, RZ, Gripper]
-# 初始位置设置为安全位置
+def init_piper():
+    """初始化Piper机械臂"""
+    print("正在连接Piper机械臂...")
+    piper = C_PiperInterface_V2("can0")
+    piper.ConnectPort()
+    while not piper.EnablePiper():
+        print("等待机械臂使能...")
+        time.sleep(0.01)
+    print("Piper机械臂连接成功！")
+    return piper
+
+def setup_udp():
+    """设置UDP套接字"""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(('127.0.0.1', UDP_PORT))
+    sock.settimeout(0.001)
+    print(f"UDP服务器启动，监听端口{UDP_PORT}...")
+    return sock
+
+def set_initial_position(piper, target_pos):
+    """设置初始位置"""
+    print("设置机械臂初始位置...")
+    piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
+    piper.EndPoseCtrl(*[int(x) for x in target_pos[:6]])
+    piper.GripperCtrl(0, 1000, 0x01, 0)
+    time.sleep(2)
+
+def update_position(target_pos, current_pos, last_pos):
+    """更新目标位置"""
+    if last_pos is None:
+        return current_pos
+    
+    # 计算位置增量
+    deltas = [
+        (current_pos[0] - last_pos[0]) * MOVEMENT_SCALE * AXIS_MAPPING['X'],
+        (current_pos[2] - last_pos[2]) * MOVEMENT_SCALE * AXIS_MAPPING['Y'],
+        (current_pos[1] - last_pos[1]) * MOVEMENT_SCALE * AXIS_MAPPING['Z']
+    ]
+    
+    # 更新目标位置
+    for i, delta in enumerate(deltas):
+        target_pos[i] += delta
+    
+    return current_pos
+
+def update_rotation(target_pos, rotation):
+    """更新姿态"""
+    target_pos[3] = rotation[1] * ROTATION_SCALE * AXIS_MAPPING['Y']
+    target_pos[4] = rotation[0] * ROTATION_SCALE * AXIS_MAPPING['X']
+
+def control_z_rotation(target_pos, controller_data):
+    """控制Z轴旋转"""
+    if 'axes' in controller_data and len(controller_data['axes']) > 2:
+        rz_speed = -controller_data['axes'][2] * ROTATION_SCALE * 0.1
+        target_pos[5] += rz_speed
+
+def control_gripper(target_pos, controller_data):
+    """控制夹爪"""
+    if 'buttons' in controller_data and len(controller_data['buttons']) > 0:
+        target_pos[6] = 50 if controller_data['buttons'][0] else 0
+
+def send_commands(piper, target_pos):
+    """发送控制命令到机械臂"""
+    # 转换为整数值
+    coords = [round(pos * FACTOR) for pos in target_pos]
+    
+    piper.MotionCtrl_2(0x01, 0x00, 100, 0x00)
+    piper.EndPoseCtrl(*coords[:6])
+    piper.GripperCtrl(abs(coords[6]), 1000, 0x01, 0)
+
+# Initialize components
+piper = init_piper()
+udp_socket = setup_udp()
 target_position = [150.0, 0.0, 200.0, 0.0, 90.0, 0.0, 0.0]
-
-# UDP socket setup
-udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-udp_socket.bind(('127.0.0.1', 12345))
-udp_socket.settimeout(0.001)
-print("UDP服务器启动，监听端口12345...")
-
-# Controller tracking variables
 last_controller_position = None
-MOVEMENT_SCALE = 1.0  # Scale factor for position movement (mm)
-ROTATION_SCALE = 1.0  # Scale factor for rotation (degrees)
 
-# Axis mapping coefficients
-AXIS_MAPPING = {
-    'X': -1,  # 控制器左右对应机械臂前后（取反）
-    'Y': -1,  # 控制器上下对应机械臂左右（取反）
-    'Z': 1    # 控制器前后对应机械臂上下（保持）
-}
-
-# 设置初始位置
-print("设置机械臂初始位置...")
-piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)  # 设置较慢的速度进行初始化
-piper.EndPoseCtrl(int(target_position[0]), int(target_position[1]), int(target_position[2]), 
-                  int(target_position[3]), int(target_position[4]), int(target_position[5]))
-piper.GripperCtrl(0, 1000, 0x01, 0)  # 夹爪打开
-time.sleep(2)  # 等待到达初始位置
+set_initial_position(piper, target_position)
 
 print("开始WebXR控制循环...")
 
 # 主控制循环
 try:
-    start = time.time()
-    while time.time() - start < 1000:
-        step_start = time.time()
+    start_time = time.time()
+    last_print_time = 0
+    
+    while time.time() - start_time < 1000:
         try:
-            # 接收UDP数据
-            data, addr = udp_socket.recvfrom(1024)
+            # 接收并解析UDP数据
+            data, _ = udp_socket.recvfrom(1024)
             message = json.loads(data.decode())
-
-            # 只处理controller2的数据用于机械臂控制
-            if message['controller_id'] == 'controller2':
-                controller_data = message['data']
-                current_position = [
-                    controller_data['position']['x'],
-                    controller_data['position']['y'],
-                    controller_data['position']['z']
-                ]
-
-                if last_controller_position is not None:
-                    # 坐标映射 - 更新位置增量
-                    delta_x = (current_position[0] - last_controller_position[0]) * MOVEMENT_SCALE * AXIS_MAPPING['X']
-                    delta_y = (current_position[2] - last_controller_position[2]) * MOVEMENT_SCALE * AXIS_MAPPING['Y']
-                    delta_z = (current_position[1] - last_controller_position[1]) * MOVEMENT_SCALE * AXIS_MAPPING['Z']
-
-                    # 更新目标位置 (mm)
-                    target_position[0] = target_position[0] + delta_x
-                    target_position[1] = target_position[1] + delta_y
-                    target_position[2] = target_position[2] + delta_z
-
-                last_controller_position = current_position
-
-                # 更新姿态 (degrees)
-                rotation = [
-                    controller_data['rotation']['x'],
-                    controller_data['rotation']['y'],
-                    controller_data['rotation']['z']
-                ]
-                target_position[3] = rotation[1] * ROTATION_SCALE * AXIS_MAPPING['Y']
-                target_position[4] = rotation[0] * ROTATION_SCALE * AXIS_MAPPING['X']
-
-                # 使用axes数据控制Z轴旋转和buttons控制夹爪
-                if 'axes' in controller_data and 'buttons' in controller_data:
-                    axes = controller_data['axes']
-                    buttons = controller_data['buttons']
-
-                    if len(axes) > 2:
-                        # Z轴旋转控制
-                        rz_speed = -axes[2] * ROTATION_SCALE * 0.1
-                        target_position[5] = target_position[5] + rz_speed
-
-                    # 夹爪控制
-                    if len(buttons) > 0:
-                        if buttons[0]:
-                            target_position[6] = 50  # 打开
-                        else:
-                            target_position[6] = 0     # 完全闭合
-
-        except socket.timeout:
-            pass  # 没有数据时继续循环
-        except json.JSONDecodeError:
-            print("JSON解析错误，跳过此数据包")
-            continue
+            
+            # 只处理controller2的数据
+            if message.get('controller_id') != 'controller2':
+                continue
+                
+            controller_data = message['data']
+            
+            # 提取当前位置和姿态
+            pos_data = controller_data['position']
+            current_position = [pos_data['x'], pos_data['y'], pos_data['z']]
+            
+            rot_data = controller_data['rotation']
+            rotation = [rot_data['x'], rot_data['y'], rot_data['z']]
+            
+            # 更新位置和姿态
+            last_controller_position = update_position(target_position, current_position, last_controller_position)
+            update_rotation(target_position, rotation)
+            control_z_rotation(target_position, controller_data)
+            control_gripper(target_position, controller_data)
+            
+        except (socket.timeout, json.JSONDecodeError, KeyError):
+            pass  # 忽略超时和解析错误，继续循环
         except Exception as e:
-            print(f"接收数据时出错: {e}")
+            print(f"数据处理错误: {e}")
             continue
 
-        # 控制Piper机械臂
-        factor = 1000
-        X = round(target_position[0] * factor)
-        Y = round(target_position[1] * factor)
-        Z = round(target_position[2] * factor)
-        RX = round(target_position[3] * factor)
-        RY = round(target_position[4] * factor)
-        RZ = round(target_position[5] * factor)
-        gripper = round(target_position[6] * factor)
-
-        # 每隔一定时间打印当前目标位置
-        if int(time.time() * 10) % 10 == 0:  # 每秒打印一次
-            print(f"Target: X={X}, Y={Y}, Z={Z}, RX={RX}, RY={RY}, RZ={RZ}, Gripper={gripper}")
-        
+        # 发送控制命令
         try:
-            # 发送运动控制命令
-            piper.MotionCtrl_2(0x01, 0x00, 100, 0x00)  # 设置运动模式和速度
-            piper.EndPoseCtrl(X, Y, Z, RX, RY, RZ)     # 末端位置控制
-            piper.GripperCtrl(abs(gripper), 1000, 0x01, 0)  # 夹爪控制
+            send_commands(piper, target_position)
         except Exception as e:
             print(f"控制机械臂时出错: {e}")
         
-        time.sleep(0.01)  # 控制循环频率
+        # 定期打印状态
+        current_time = time.time()
+        if current_time - last_print_time >= 1.0:  # 每秒打印一次
+            coords = [round(pos * FACTOR) for pos in target_position]
+            print(f"Target: X={coords[0]}, Y={coords[1]}, Z={coords[2]}, "
+                  f"RX={coords[3]}, RY={coords[4]}, RZ={coords[5]}, Gripper={coords[6]}")
+            last_print_time = current_time
+        
+        time.sleep(0.01)
 
 except KeyboardInterrupt:
     print("\n用户中断程序...")
@@ -149,7 +152,7 @@ finally:
     print("正在关闭连接...")
     udp_socket.close()
     try:
-        piper.DisablePiper()  # 断开Piper连接
+        piper.DisablePiper()
         print("Piper机械臂已安全断开")
-    except:
-        print("断开Piper连接时出错，请手动检查")
+    except Exception as e:
+        print(f"断开Piper连接时出错: {e}")
