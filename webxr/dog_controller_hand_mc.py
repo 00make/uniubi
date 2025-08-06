@@ -30,7 +30,8 @@ class DogController:
         self.running = True
         self.udp_transport = None
         self._params_lock = asyncio.Lock()
-        self.last_position = None  # 添加位置跟踪
+        self.movement_position = None  # 添加运动控制位置追踪
+        self.MOVEMENT_SCALE = 5.0  # 位置变化到速度的映射系数
 
     async def init_udp(self):
         class UDPProtocol(asyncio.DatagramProtocol):
@@ -76,24 +77,42 @@ class DogController:
             await self.init_robot()
         if self._params_lock.locked():
             return
-        axes = data.get('axes', [0, 0])
         buttons = data.get('buttons', [])
         position = data.get('position', {})
 
         vx, vy, wz = 0.0, 0.0, 0.0
         
-        # 摇杆控制
-        if buttons:
-            # 安全地访问axes数组，避免索引越界
-            vx_axis = axes[3] if len(axes) > 3 else 0
-            wz_axis = axes[2] if len(axes) > 2 else 0
+        current_position = [
+            position.get('x', 0),
+            position.get('y', 0),
+            position.get('z', 0)
+        ]
+        
+        # 所有控制都在按钮0按下时生效
+        if buttons and buttons[0]:
+            # 运动控制
+            if self.movement_position is not None:
+                # 计算位置变化
+                delta_x = current_position[0] - self.movement_position[0]
+                delta_z = current_position[2] - self.movement_position[2]
+                delta_y = current_position[1] - self.movement_position[1]
+                
+                # 映射到速度命令
+                vx = -delta_z * self.MOVEMENT_SCALE  # 前后移动（z轴变化）
+                vy = delta_y * self.MOVEMENT_SCALE   # 左右移动（y轴变化）
+                wz = -delta_x * self.MOVEMENT_SCALE  # 转向（x轴变化）
+                
+                # 限制速度范围
+                vx = max(SPEED_RANGE[0], min(SPEED_RANGE[1], vx))
+                vy = max(SPEED_RANGE[0], min(SPEED_RANGE[1], vy))
+                wz = max(SPEED_RANGE[0], min(SPEED_RANGE[1], wz))
+                
+                logger.info(f"移动: vx={vx:.2f}m/s, vy={vy:.2f}m/s, wz={wz:.2f}rad/s")
             
-            # 映射到机器狗的移动参数
-            vx = -vx_axis * SPEED_RANGE[1]  # 前后移动
-            vy = 0.0  # 不使用左右移动
-            wz = -wz_axis * SPEED_RANGE[1]  # 转向
-            
-            logger.info(f"移动: vx={vx:.2f}m/s, wz={wz:.2f}rad/s")
+            self.movement_position = current_position
+        else:
+            self.movement_position = None  # 重置位置追踪
+            vx, vy, wz = 0.0, 0.0, 0.0
 
         await self._set_parameters_safe(vx, vy, wz)
 
@@ -126,6 +145,7 @@ if __name__ == '__main__':
     dog_ip = '192.168.234.1'  # 机器狗IP地址
     def get_local_234_ip():
         """动态获取本机234网段的IP地址"""
+        
         try:
             # 方法1: 通过socket连接获取
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -164,6 +184,7 @@ if __name__ == '__main__':
         print(f"正在连接到机器狗 ({dog_ip})...")
         print(f"本地地址: {local_ip}:{local_port}")
         print("如需修改IP地址，请编辑脚本中的配置变量")
+        print("使用手势控制：按住按钮0并移动手部来控制机器狗")
         asyncio.run(controller.run())
     except KeyboardInterrupt:
         print("\n程序被用户中断")
