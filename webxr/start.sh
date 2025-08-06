@@ -13,6 +13,7 @@ PYTHON_EXECUTABLE="/root/miniconda3/envs/lerobot/bin/python"
 declare -a SCRIPTS=(
   "app.py app.log 5000"
   "arm_controller_joystick.py arm.log 12345"
+  "dog_controller_joystick.py dog.log 12346"
 )
 
 
