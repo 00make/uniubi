@@ -6,8 +6,8 @@ import socket
 import json
 
 # Constants
-MOVEMENT_SCALE = 100
-ROTATION_SCALE = 100
+MOVEMENT_SCALE = 360
+ROTATION_SCALE = 36
 AXIS_MAPPING = {'X': -1, 'Y': -1, 'Z': 1}
 UDP_PORT = 12345
 FACTOR = 1000
@@ -89,7 +89,7 @@ def update_rotation(target_pos, rotation, last_rotation=None, calibration_mode=F
 def control_gripper(target_pos, controller_data):
     """控制夹爪"""
     if 'buttons' in controller_data and len(controller_data['buttons']) > 0:
-        target_pos[6] = 50 if controller_data['buttons'][0] else 0
+        target_pos[6] = 0 if controller_data['buttons'][0] else 50
 
 def send_commands(piper, target_pos, last_sent_pos=None):
     """发送控制命令到机械臂"""
