@@ -38,6 +38,8 @@ def setup_udp():
 def set_initial_position(piper, target_pos):
     """设置初始位置"""
     print("设置机械臂初始位置...")
+    piper.MotionCtrl_1(0x02,0,0)#恢复
+    piper.MotionCtrl_2(0, 0, 0, 0x00)#位置速度模式
     piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
     piper.EndPoseCtrl(*[int(x) for x in target_pos[:6]])
     piper.GripperCtrl(0, 1000, 0x01, 0)
@@ -205,7 +207,7 @@ finally:
     print("正在关闭连接...")
     udp_socket.close()
     try:
-        piper.DisablePiper()
+        piper.MotionCtrl_1(0x01,0,0)
         print("Piper机械臂已安全断开")
     except Exception as e:
         print(f"断开Piper连接时出错: {e}")
