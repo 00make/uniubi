@@ -28,9 +28,25 @@ def init_piper():
     print("正在连接Piper机械臂...")
     piper = C_PiperInterface_V2("can0")
     piper.ConnectPort()
+    
+    # 先尝试恢复（防止机械臂处于急停状态）
+    print("尝试恢复机械臂状态...")
+    try:
+        piper.MotionCtrl_1(0x02, 0, 0)  # 恢复
+        piper.MotionCtrl_2(0, 0, 0, 0x00)  # 位置速度模式
+        time.sleep(0.1)  # 短暂等待
+    except Exception as e:
+        print(f"恢复尝试: {e}")
+    
+    # 使能机械臂
+    enable_count = 0
     while not piper.EnablePiper():
-        print("等待机械臂使能...")
+        enable_count += 1
+        print(f"等待机械臂使能... (第{enable_count}次)")
         time.sleep(0.01)
+        if enable_count > 300:  # 增加超时时间
+            raise Exception("机械臂使能超时")
+    
     print("Piper机械臂连接成功！")
     return piper
 
