@@ -6,8 +6,8 @@ import socket
 import json
 
 # Constants
-MOVEMENT_SCALE = 10
-ROTATION_SCALE = 2
+MOVEMENT_SCALE = 100
+ROTATION_SCALE = 100
 AXIS_MAPPING = {'X': -1, 'Y': -1, 'Z': 1}
 UDP_PORT = 12345
 FACTOR = 1000
@@ -54,9 +54,9 @@ def update_position(target_pos, current_pos, last_pos, calibration_mode=False):
     
     # 计算位置增量
     deltas = [
-        (current_pos[0] - last_pos[0]) * MOVEMENT_SCALE * AXIS_MAPPING['X'],
-        (current_pos[1] - last_pos[1]) * MOVEMENT_SCALE * AXIS_MAPPING['Y'],
-        (current_pos[2] - last_pos[2]) * MOVEMENT_SCALE * AXIS_MAPPING['Z']
+        (current_pos[0] - last_pos[0]) * MOVEMENT_SCALE * AXIS_MAPPING['Y'],
+        (current_pos[1] - last_pos[1]) * MOVEMENT_SCALE * AXIS_MAPPING['Z'],
+        (current_pos[2] - last_pos[2]) * MOVEMENT_SCALE * AXIS_MAPPING['X']
     ]
     
     # 更新目标位置
@@ -75,8 +75,8 @@ def update_rotation(target_pos, rotation, last_rotation=None, calibration_mode=F
         return rotation
     
     # 计算姿态增量（包括Z轴旋转）
-    delta_rx = (rotation[0] - last_rotation[0]) * ROTATION_SCALE * AXIS_MAPPING['X']
-    delta_ry = (rotation[1] - last_rotation[1]) * ROTATION_SCALE * AXIS_MAPPING['Y']
+    delta_rx = (rotation[0] - last_rotation[0]) * ROTATION_SCALE * AXIS_MAPPING['Y']
+    delta_ry = (rotation[1] - last_rotation[1]) * ROTATION_SCALE * AXIS_MAPPING['X']
     delta_rz = (rotation[2] - last_rotation[2]) * ROTATION_SCALE * AXIS_MAPPING['Z']
     
     # 应用增量
