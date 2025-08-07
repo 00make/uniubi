@@ -16,6 +16,13 @@ CALIBRATION_FRAMES = 10  # 校准帧数
 MAX_SINGLE_MOVE = 5000    # 最大单次移动量 (mm/1000)
 MAX_SINGLE_ROTATE = 2000  # 最大单次旋转量 (度/1000)
 
+# 按钮状态管理
+button_states = {
+    'button1_pressed': False,  # 回初始位置按钮状态
+    'button3_pressed': False,  # 急停按钮状态
+    'emergency_stop': False    # 急停状态
+}
+
 def init_piper():
     """初始化Piper机械臂"""
     print("正在连接Piper机械臂...")
@@ -42,8 +49,8 @@ def set_initial_position(piper, target_pos):
     piper.MotionCtrl_2(0, 0, 0, 0x00)#位置速度模式
     piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
     piper.EndPoseCtrl(*[int(x) for x in target_pos[:6]])
-    piper.GripperCtrl(0, 1000, 0x01, 0)
-    time.sleep(2)
+    piper.GripperCtrl(500, 1000, 0x01, 0)
+    time.sleep(1)
 
 def update_position(target_pos, current_pos, last_pos, calibration_mode=False):
     """更新目标位置"""
@@ -93,6 +100,61 @@ def control_gripper(target_pos, controller_data):
     if 'buttons' in controller_data and len(controller_data['buttons']) > 0:
         target_pos[6] = 0 if controller_data['buttons'][0] else 50
 
+def control_buttons(piper, target_pos, controller_data):
+    """控制其他按钮功能"""
+    global button_states
+    
+    if 'buttons' not in controller_data or len(controller_data['buttons']) < 4:
+        return
+    
+    buttons = controller_data['buttons']
+    
+    # 按钮1：回初始位置
+    if buttons[1] and not button_states['button1_pressed']:
+        button_states['button1_pressed'] = True
+        print("执行回初始位置...")
+        try:
+            # 如果当前处于急停状态，需要先恢复
+            if button_states['emergency_stop']:
+                piper.MotionCtrl_1(0x02, 0, 0)  # 恢复
+                piper.MotionCtrl_2(0, 0, 0, 0x00)  # 位置速度模式
+                button_states['emergency_stop'] = False
+                print("已从急停状态恢复")
+            
+            piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
+            piper.EndPoseCtrl(*[int(x * FACTOR) for x in [150.0, 0.0, 200.0, 0.0, 90.0, 0.0]])
+            piper.GripperCtrl(500, 1000, 0x01, 0)
+            
+            # 更新目标位置
+            target_pos[:] = [150.0, 0.0, 200.0, 0.0, 90.0, 0.0, 500.0]
+            print("已回到初始位置")
+        except Exception as e:
+            print(f"回初始位置失败: {e}")
+    elif not buttons[1]:
+        button_states['button1_pressed'] = False
+    
+    # 按钮3：急停/恢复切换
+    if buttons[3] and not button_states['button3_pressed']:
+        button_states['button3_pressed'] = True
+        try:
+            if not button_states['emergency_stop']:
+                # 执行急停
+                print("执行急停...")
+                piper.MotionCtrl_1(0x01, 0, 0)
+                button_states['emergency_stop'] = True
+                print("机械臂已急停")
+            else:
+                # 从急停恢复
+                print("从急停恢复...")
+                piper.MotionCtrl_1(0x02, 0, 0)  # 恢复
+                piper.MotionCtrl_2(0, 0, 0, 0x00)  # 位置速度模式
+                button_states['emergency_stop'] = False
+                print("机械臂已恢复，可以继续控制")
+        except Exception as e:
+            print(f"急停/恢复操作失败: {e}")
+    elif not buttons[3]:
+        button_states['button3_pressed'] = False
+
 def send_commands(piper, target_pos, last_sent_pos=None):
     """发送控制命令到机械臂"""
     # 如果有上次发送的位置，检查移动量限制
@@ -127,7 +189,7 @@ def send_commands(piper, target_pos, last_sent_pos=None):
 # Initialize components
 piper = init_piper()
 udp_socket = setup_udp()
-target_position = [150.0, 0.0, 200.0, 0.0, 90.0, 0.0, 0.0]
+target_position = [150.0, 0.0, 200.0, 0.0, 90.0, 0.0, 500.0]
 last_controller_position = None
 last_controller_rotation = None
 calibration_counter = 0  # 校准计数器
@@ -172,9 +234,10 @@ try:
             last_controller_position = update_position(target_position, current_position, last_controller_position, is_calibrating)
             last_controller_rotation = update_rotation(target_position, rotation, last_controller_rotation, is_calibrating)
             
-            # 只在非校准模式下控制夹爪
+            # 只在非校准模式下控制夹爪和按钮
             if not is_calibrating:
                 control_gripper(target_position, controller_data)
+                control_buttons(piper, target_position, controller_data)
             
         except (socket.timeout, json.JSONDecodeError, KeyError):
             pass  # 忽略超时和解析错误，继续循环
