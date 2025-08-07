@@ -34,6 +34,29 @@ def init_piper():
     print("Piper机械臂连接成功！")
     return piper
 
+def recover_piper(piper):
+    """恢复Piper机械臂从急停状态"""
+    print("正在恢复机械臂...")
+    try:
+        # 执行恢复命令
+        piper.MotionCtrl_1(0x02, 0, 0)  # 恢复
+        piper.MotionCtrl_2(0, 0, 0, 0x00)  # 位置速度模式
+        
+        # 重新使能机械臂
+        enable_count = 0
+        while not piper.EnablePiper():
+            enable_count += 1
+            print(f"等待机械臂使能... (第{enable_count}次)")
+            time.sleep(0.01)
+            if enable_count > 200:  # 防止无限循环
+                raise Exception("机械臂使能超时")
+        
+        print("机械臂恢复成功！")
+        return True
+    except Exception as e:
+        print(f"机械臂恢复失败: {e}")
+        return False
+
 def setup_udp():
     """设置UDP套接字"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -45,8 +68,6 @@ def setup_udp():
 def set_initial_position(piper, target_pos):
     """设置初始位置"""
     print("设置机械臂初始位置...")
-    piper.MotionCtrl_1(0x02,0,0)#恢复
-    piper.MotionCtrl_2(0, 0, 0, 0x00)#位置速度模式
     piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
     piper.EndPoseCtrl(*[int(x) for x in target_pos[:6]])
     piper.GripperCtrl(500, 1000, 0x01, 0)
@@ -116,10 +137,12 @@ def control_buttons(piper, target_pos, controller_data):
         try:
             # 如果当前处于急停状态，需要先恢复
             if button_states['emergency_stop']:
-                piper.MotionCtrl_1(0x02, 0, 0)  # 恢复
-                piper.MotionCtrl_2(0, 0, 0, 0x00)  # 位置速度模式
-                button_states['emergency_stop'] = False
-                print("已从急停状态恢复")
+                if recover_piper(piper):
+                    button_states['emergency_stop'] = False
+                    print("已从急停状态恢复")
+                else:
+                    print("恢复失败，无法执行回初始位置")
+                    return
             
             piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
             piper.EndPoseCtrl(*[int(x * FACTOR) for x in [150.0, 0.0, 200.0, 0.0, 90.0, 0.0]])
@@ -146,10 +169,11 @@ def control_buttons(piper, target_pos, controller_data):
             else:
                 # 从急停恢复
                 print("从急停恢复...")
-                piper.MotionCtrl_1(0x02, 0, 0)  # 恢复
-                piper.MotionCtrl_2(0, 0, 0, 0x00)  # 位置速度模式
-                button_states['emergency_stop'] = False
-                print("机械臂已恢复，可以继续控制")
+                if recover_piper(piper):
+                    button_states['emergency_stop'] = False
+                    print("机械臂已恢复，可以继续控制")
+                else:
+                    print("恢复失败")
         except Exception as e:
             print(f"急停/恢复操作失败: {e}")
     elif not buttons[3]:
