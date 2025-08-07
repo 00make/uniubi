@@ -57,6 +57,33 @@ def recover_piper(piper):
         print(f"机械臂恢复失败: {e}")
         return False
 
+def stop_piper(piper):
+    """停止Piper机械臂"""
+    print("正在停止机械臂...")
+    try:
+        piper.MotionCtrl_1(0x01, 0, 0)  # 急停
+        print("机械臂已停止")
+        return True
+    except Exception as e:
+        print(f"机械臂停止失败: {e}")
+        return False
+
+def go_to_initial_position(piper, target_pos):
+    """回到初始位置"""
+    print("正在回到初始位置...")
+    try:
+        piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
+        piper.EndPoseCtrl(*[int(x * FACTOR) for x in [150.0, 0.0, 200.0, 0.0, 90.0, 0.0]])
+        piper.GripperCtrl(500, 1000, 0x01, 0)
+        
+        # 更新目标位置
+        target_pos[:] = [150.0, 0.0, 200.0, 0.0, 90.0, 0.0, 500.0]
+        print("已回到初始位置")
+        return True
+    except Exception as e:
+        print(f"回初始位置失败: {e}")
+        return False
+
 def setup_udp():
     """设置UDP套接字"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -64,14 +91,6 @@ def setup_udp():
     sock.settimeout(0.001)
     print(f"UDP服务器启动，监听端口{UDP_PORT}...")
     return sock
-
-def set_initial_position(piper, target_pos):
-    """设置初始位置"""
-    print("设置机械臂初始位置...")
-    piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
-    piper.EndPoseCtrl(*[int(x) for x in target_pos[:6]])
-    piper.GripperCtrl(500, 1000, 0x01, 0)
-    time.sleep(1)
 
 def update_position(target_pos, current_pos, last_pos, calibration_mode=False):
     """更新目标位置"""
@@ -144,15 +163,10 @@ def control_buttons(piper, target_pos, controller_data):
                     print("恢复失败，无法执行回初始位置")
                     return
             
-            piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
-            piper.EndPoseCtrl(*[int(x * FACTOR) for x in [150.0, 0.0, 200.0, 0.0, 90.0, 0.0]])
-            piper.GripperCtrl(500, 1000, 0x01, 0)
-            
-            # 更新目标位置
-            target_pos[:] = [150.0, 0.0, 200.0, 0.0, 90.0, 0.0, 500.0]
-            print("已回到初始位置")
+            # 使用封装的回初始位置函数
+            go_to_initial_position(piper, target_pos)
         except Exception as e:
-            print(f"回初始位置失败: {e}")
+            print(f"回初始位置操作失败: {e}")
     elif not buttons[1]:
         button_states['button1_pressed'] = False
     
@@ -163,15 +177,17 @@ def control_buttons(piper, target_pos, controller_data):
             if not button_states['emergency_stop']:
                 # 执行急停
                 print("执行急停...")
-                piper.MotionCtrl_1(0x01, 0, 0)
-                button_states['emergency_stop'] = True
-                print("机械臂已急停")
+                if stop_piper(piper):
+                    button_states['emergency_stop'] = True
+                    print("机械臂已急停")
             else:
                 # 从急停恢复
                 print("从急停恢复...")
                 if recover_piper(piper):
                     button_states['emergency_stop'] = False
-                    print("机械臂已恢复，可以继续控制")
+                    print("机械臂已恢复，正在回到初始位置...")
+                    # 恢复后自动回到初始位置
+                    go_to_initial_position(piper, target_pos)
                 else:
                     print("恢复失败")
         except Exception as e:
@@ -219,7 +235,8 @@ last_controller_rotation = None
 calibration_counter = 0  # 校准计数器
 last_sent_position = None  # 上次发送给机械臂的位置
 
-set_initial_position(piper, target_position)
+print("设置机械臂初始位置...")
+go_to_initial_position(piper, target_position)
 
 print("开始WebXR控制循环...")
 
@@ -294,7 +311,7 @@ finally:
     print("正在关闭连接...")
     udp_socket.close()
     try:
-        piper.MotionCtrl_1(0x01,0,0)
+        stop_piper(piper)
         print("Piper机械臂已安全断开")
     except Exception as e:
         print(f"断开Piper连接时出错: {e}")
