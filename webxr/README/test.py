@@ -21,7 +21,7 @@ class HandRobotController:
 
     class MiniController(object):
         def __init__(self, host="10.168.135.114", port=6379, db=6, redis_client=None) -> None:
-            import webxr.test as test
+            import webxr.README.test as test
             if redis_client is None:
                 self.redis_client = test.CommandRedis(
                     "Robot Control", host=host, port=port, db=db)
