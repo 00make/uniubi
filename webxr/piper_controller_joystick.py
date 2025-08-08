@@ -9,8 +9,8 @@ from piper_sdk import C_PiperInterface_V2
 # ================================
 # 常量配置
 # ================================
-MOVEMENT_SCALE = 360
-ROTATION_SCALE = 36
+MOVEMENT_SCALE = 600
+ROTATION_SCALE = 40
 AXIS_MAPPING = {'X': -1, 'Y': -1, 'Z': 1}
 UDP_PORT = 12345
 FACTOR = 1000
@@ -43,14 +43,17 @@ def init_piper():
         C_PiperInterface_V2: 机械臂接口对象
     """
     print("正在连接Piper机械臂...")
-    piper = C_PiperInterface_V2("can0")
+    piper = C_PiperInterface_V2("can1")
     piper.ConnectPort()
     
     # 先尝试恢复（防止机械臂处于急停状态）
     print("尝试恢复机械臂状态...")
     try:
         piper.MotionCtrl_1(0x02, 0, 0)      # 恢复
-        piper.MotionCtrl_2(0, 0, 0, 0x00)   # 位置速度模式
+        time.sleep(0.1)                     # 短暂等待
+        piper.MotionCtrl_2(0x01, 0x01, 0, 0, 0, 0x01)  # 设置水平正装
+        time.sleep(0.1)                     # 短暂等待
+        piper.MotionCtrl_2(0x01, 0x00, 0, 0x00)   # 位置速度模式
         time.sleep(0.1)                     # 短暂等待
     except Exception as e:
         print(f"恢复尝试: {e}")
@@ -63,6 +66,12 @@ def init_piper():
         time.sleep(0.01)
         if enable_count > 300:
             raise Exception("机械臂使能超时")
+    
+    # 配置机械臂负载参数
+    load = 2  # 根据实际情况选择
+    print(f"配置机械臂负载参数: {load}")
+    piper.ArmParamEnquiryAndConfig(0, 0, 0, 0xAE, load)
+    piper.CrashProtectionConfig(0, 0, 0, 0, 0, 0)
     
     print("Piper机械臂连接成功！")
     return piper
@@ -81,7 +90,6 @@ def recover_piper(piper):
     try:
         # 执行恢复命令
         piper.MotionCtrl_1(0x02, 0, 0)      # 恢复
-        piper.MotionCtrl_2(0, 0, 0, 0x00)   # 位置速度模式
         
         # 重新使能机械臂
         enable_count = 0
@@ -130,7 +138,7 @@ def go_to_initial_position(piper, target_pos):
     """
     print("正在回到初始位置...")
     try:
-        piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)
+        piper.MotionCtrl_2(0x01, 0x00, 100, 0x00)
         piper.EndPoseCtrl(*[int(x * FACTOR) for x in INITIAL_POSITION[:6]])
         piper.GripperCtrl(500, 1000, 0x01, 0)
         
